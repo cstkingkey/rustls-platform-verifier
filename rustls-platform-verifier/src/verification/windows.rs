@@ -222,6 +222,8 @@ impl CertEngine {
     fn new_with_extra_roots(
         roots: impl IntoIterator<Item = pki_types::CertificateDer<'static>>,
     ) -> Result<Self, TlsError> {
+        use windows_sys::Win32::Security::Cryptography::CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG;
+
         let mut exclusive_store = CertificateStore::new()?;
         for root in roots {
             exclusive_store.add_cert(&root)?;
@@ -229,6 +231,10 @@ impl CertEngine {
 
         let mut config = CERT_CHAIN_ENGINE_CONFIG::zeroed_with_size();
         config.hExclusiveRoot = exclusive_store.inner.as_ptr();
+        #[cfg(not(target_vendor = "win7"))]
+        {
+            config.dwExclusiveFlags = CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG;
+        }
 
         let mut engine = EnginePtr::NULL;
         // SAFETY: `engine` is valid to be written to and the config is valid to be read.
@@ -246,6 +252,7 @@ impl CertEngine {
     fn new_with_fake_root(root: &[u8]) -> Result<Self, TlsError> {
         use windows_sys::Win32::Security::Cryptography::{
             CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL, CERT_CHAIN_ENABLE_CACHE_AUTO_UPDATE,
+            CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG,
         };
 
         let mut root_store = CertificateStore::new()?;
@@ -263,6 +270,10 @@ impl CertEngine {
         // Ref: https://docs.microsoft.com/en-us/windows/win32/api/wincrypt/ns-wincrypt-cert_chain_engine_config
         config.dwFlags = CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL | CERT_CHAIN_ENABLE_CACHE_AUTO_UPDATE;
         config.hExclusiveRoot = root_store.inner.as_ptr();
+        #[cfg(not(target_vendor = "win7"))]
+        {
+            config.dwExclusiveFlags = CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG;
+        }
 
         let mut engine = EnginePtr::NULL;
         // SAFETY: `engine` is valid to be written to and the config is valid to be read.
